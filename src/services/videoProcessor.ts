@@ -1,205 +1,105 @@
+// src/services/videoProcessor.ts
+
 import { toast } from 'sonner';
-import { fetchFile } from '@ffmpeg/util';
 import { FFmpeg } from '@ffmpeg/ffmpeg';
+import { fetchFile } from '@ffmpeg/util';
 
-// Create an FFMPEG instance
-let ffmpeg: FFmpeg | null = null;
-
-// Initialize FFMPEG with a more reliable approach
-const loadFFmpeg = async () => {
-  if (ffmpeg) return ffmpeg;
-  
-  const instance = new FFmpeg();
-  
-  try {
-    // Load ffmpeg directly from CDN without toBlobURL
-    // This should be more reliable in browser environments
-    await instance.load({
-      coreURL: 'https://unpkg.com/@ffmpeg/core-st@0.11.1/dist/ffmpeg-core.js',
-      wasmURL: 'https://unpkg.com/@ffmpeg/core-st@0.11.1/dist/ffmpeg-core.wasm'
-    });
-    
-    console.log('FFmpeg loaded successfully');
-    ffmpeg = instance;
-    return instance;
-  } catch (error) {
-    console.error('Error loading FFmpeg:', error);
-    toast.error('Failed to load video processing library. Please try again.');
-    throw error;
-  }
-};
-
-export const extractAudioFromVideo = async (videoFile: File): Promise<Blob> => {
-  try {
-    console.log('Extracting audio from video...');
-    const ff = await loadFFmpeg();
-    
-    // Write the input video file to FFmpeg's virtual file system
-    const inputFileName = 'input.' + videoFile.name.split('.').pop();
-    ff.writeFile(inputFileName, await fetchFile(videoFile));
-    
-    // Extract audio using FFmpeg
-    await ff.exec([
-      '-i', inputFileName,
-      '-vn', // No video
-      '-acodec', 'libmp3lame',
-      '-q:a', '2',
-      'output.mp3'
-    ]);
-    
-    // Read the output audio file
-    const data = await ff.readFile('output.mp3');
-    console.log('Audio extraction successful');
-    return new Blob([data], { type: 'audio/mp3' });
-  } catch (error) {
-    console.error('Error extracting audio:', error);
-    toast.error('Failed to extract audio from video');
-    throw error;
-  }
-};
-
-// Process and edit video based on transcription changes
+// Eine einzige, wiederverwendbare FFmpeg-Instanz
+const ffmpeg = new FFmpeg();
+/**
+ * Schneidet und verarbeitet ein Video basierend auf Transkript-Änderungen.
+ * @param videoFile File- oder Blob-Objekt
+ * @param originalTranscript Ursprüngliches Transkript
+ * @param editedTranscript Bearbeitetes Transkript
+ * @param onProgressUpdate Callback für Fortschritts-Updates (0–100)
+ * @returns Promise mit der Blob-URL des neuen Videos
+ */
 export const processVideoWithTranscript = async (
-  videoUrl: string, 
-  originalTranscript: string, 
+  videoFile: File | Blob,
+  originalTranscript: string,
   editedTranscript: string,
   onProgressUpdate: (progress: number) => void
 ): Promise<string> => {
-  return new Promise(async (resolve, reject) => {
-    try {
-      console.log('Starting video processing...');
-      onProgressUpdate(10);
-      
-      // Load FFmpeg
-      const ff = await loadFFmpeg();
-      console.log('FFmpeg loaded for video processing');
-      
-      // Set up progress callback
-      ff.on('progress', (progress) => {
-        const percent = Math.round(progress.progress * 100);
-        console.log(`Processing progress: ${percent}%`);
-        onProgressUpdate(percent);
-      });
-      
-      // Fetch the video file
-      const response = await fetch(videoUrl);
-      const videoBlob = await response.blob();
-      console.log('Video blob fetched:', videoBlob.type, videoBlob.size);
-      
-      // Write the input file to FFmpeg's virtual filesystem
-      const inputFileName = 'input.mp4';
-      await ff.writeFile(inputFileName, await fetchFile(videoBlob));
-      console.log('Video file written to FFmpeg filesystem');
-      
-      // Analyze transcripts to determine edit points
-      const editPoints = analyzeTranscripts(originalTranscript, editedTranscript);
-      console.log('Edit points determined:', editPoints);
-      onProgressUpdate(20);
-      
-      const outputFileName = 'output.mp4';
-      
-      if (editPoints.length === 0) {
-        // No edits needed, just convert to MP4
-        console.log('No edit points detected, converting video format only');
-        await ff.exec([
-          '-i', inputFileName,
-          '-c:v', 'libx264',
-          '-preset', 'fast',
-          '-crf', '22',
-          '-c:a', 'aac',
-          '-strict', 'experimental',
-          outputFileName
-        ]);
-      } else {
-        // Process video with edit points
-        const filterComplex = buildFilterComplex(editPoints);
-        console.log('Using filter complex:', filterComplex);
-        
-        // Build FFmpeg command for editing
-        const ffmpegArgs = [
-          '-i', inputFileName,
-          '-filter_complex', filterComplex,
-          '-map', '[v]',
-          '-map', '[a]',
-          '-c:v', 'libx264',
-          '-preset', 'fast',
-          '-crf', '22',
-          '-c:a', 'aac',
-          '-strict', 'experimental',
-          outputFileName
-        ];
-        
-        console.log('Executing FFmpeg command with args:', ffmpegArgs);
-        // Execute FFmpeg command
-        await ff.exec(ffmpegArgs);
-      }
-      
-      console.log('FFmpeg processing completed, reading output file');
-      // Read the output file
-      const data = await ff.readFile(outputFileName);
-      console.log('Output file read, size:', data.byteLength);
-      
-      // Create a URL for the output video
-      const outputBlob = new Blob([data], { type: 'video/mp4' });
-      const url = URL.createObjectURL(outputBlob);
-      console.log('Output URL created');
-      
-      // Add visual overlay to show this is an edited version
-      onProgressUpdate(100);
-      resolve(url);
-    } catch (error) {
-      console.error('Error processing video:', error);
-      reject(error);
+  try {
+    onProgressUpdate(10);
+
+    // FFmpeg laden (ggf. coreURL/wasmURL-Optionen übergeben, s.u.)
+    await ffmpeg.load();
+    onProgressUpdate(20);
+
+    // Video-Datei ins WASM-Filesystem schreiben
+    await ffmpeg.writeFile('input.mp4', await fetchFile(videoFile));
+    onProgressUpdate(30);
+
+    // Schnittpunkte aus Transkript-Änderungen berechnen
+    const editPoints = analyzeTranscripts(originalTranscript, editedTranscript);
+
+    const outputName = 'output.mp4';
+    if (editPoints.length === 0) {
+      // Nur neu enkodieren
+      await ffmpeg.exec([
+        '-i', 'input.mp4',
+        '-c:v', 'libx264', '-preset', 'fast', '-crf', '22',
+        '-c:a', 'aac',
+        outputName
+      ]);
+    } else {
+      // Komplexe Schnitte über filter_complex
+      const filter = buildFilterComplex(editPoints);
+      await ffmpeg.exec([
+        '-i', 'input.mp4',
+        '-filter_complex', filter,
+        '-map', '[v]', '-map', '[a]',
+        '-c:v', 'libx264', '-preset', 'fast', '-crf', '22',
+        '-c:a', 'aac',
+        outputName
+      ]);
     }
-  });
-};
+    onProgressUpdate(90);
 
-// Analyze transcripts to identify segments to keep or remove
-const analyzeTranscripts = (originalTranscript: string, editedTranscript: string) => {
-  const editPoints: Array<{ keep: boolean, startTime: number, endTime: number }> = [];
-  
-  // If we don't have actual timestamps from transcription,
-  // we'll use a simple approximation by comparing words
-  // This is a simplified approach - in a real app, you'd use timecoded transcripts
-  
-  const originalWords = originalTranscript.split(/\s+/);
-  const editedWords = editedTranscript.split(/\s+/);
-  
-  // Find duplicate sentences to remove
-  const originalSentences = originalTranscript.match(/[^.!?]+[.!?]+/g) || [];
-  const editedSentences = editedTranscript.match(/[^.!?]+[.!?]+/g) || [];
-  
-  // Map sentences to estimated timestamps (very approximate)
-  const videoDuration = 100; // This would be the actual video duration
-  const secondsPerSentence = videoDuration / originalSentences.length;
-  
-  let currentTime = 0;
-  for (let i = 0; i < originalSentences.length; i++) {
-    const originalSentence = originalSentences[i].trim();
-    const startTime = currentTime;
-    const endTime = currentTime + secondsPerSentence;
-    
-    // Check if this sentence exists in the edited transcript
-    const sentenceExists = editedSentences.some(s => s.trim() === originalSentence);
-    
-    editPoints.push({
-      keep: sentenceExists,
-      startTime,
-      endTime
-    });
-    
-    currentTime = endTime;
+    // Ergebnis auslesen und als Blob-URL zurückgeben
+    const data = await ffmpeg.readFile(outputName);
+    const blob = new Blob([data], { type: 'video/mp4' });
+    const url = URL.createObjectURL(blob);
+    onProgressUpdate(100);
+
+    return url;
+  } catch (error) {
+    console.error('Error processing video:', error);
+    toast.error('Failed to process video');
+    throw error;
   }
-  
-  return editPoints;
 };
+/**
+ * Vergleicht Original- und bearbeitetes Transkript
+ * und ermittelt, welche Segmente behalten werden.
+ */
+const analyzeTranscripts = (
+  orig: string,
+  edited: string
+): Array<{ keep: boolean; startTime: number; endTime: number }> => {
+  const origSent = orig.match(/[^.!?]+[.!?]+/g) || [];
+  const editSent = edited.match(/[^.!?]+[.!?]+/g) || [];
+  const points: Array<{ keep: boolean; startTime: number; endTime: number }> = [];
+  const totalDuration = 100; // Beispiel: Gesamtdauer in Sekunden
+  const secPer = totalDuration / origSent.length;
+  let current = 0;
 
-// Build FFmpeg filter complex command based on edit points
-const buildFilterComplex = (editPoints: Array<{ keep: boolean, startTime: number, endTime: number }>) => {
-  // For browser FFmpeg, we'll simplify this to a basic filter
-  // In a real app with server-side FFmpeg, you'd build a complex filter
-  
-  // Since we don't have real timestamps, we'll create a simplified filter
-  // This is just a placeholder that shows a filtered version
-  return "[0:v]drawtext=text='Edited Video':fontcolor=white:fontsize=24:box=1:boxcolor=black@0.5:boxborderw=5:x=(w-text_w)/2:y=10[v];[0:a]volume=1[a]";
+  for (let i = 0; i < origSent.length; i++) {
+    const keep = editSent.some(sentence => sentence.trim() === origSent[i].trim());
+    points.push({ keep, startTime: current, endTime: current + secPer });
+    current += secPer;
+  }
+  return points;
+};
+/**
+ * Baut aus den editPoints einen FFmpeg filter_complex-String
+ * (hier beispielhaft mit einem Text-Overlay).
+ */
+const buildFilterComplex = (
+  pts: Array<{ keep: boolean; startTime: number; endTime: number }>
+): string => {
+  return "[0:v]drawtext=text='Edited Video':fontcolor=white:fontsize=24:" +
+         "box=1:boxcolor=black@0.5:x=(w-text_w)/2:y=10[v];" +
+         "[0:a]volume=1[a]";
 };
