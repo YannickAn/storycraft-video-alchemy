@@ -3,7 +3,7 @@ import React, { useState } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
-import { Film, Download, RotateCw } from 'lucide-react';
+import { Film, Download, RotateCw, AlertCircle } from 'lucide-react';
 import { toast } from 'sonner';
 
 interface VideoProcessorProps {
@@ -22,16 +22,33 @@ const VideoProcessor: React.FC<VideoProcessorProps> = ({
   onProcessVideo
 }) => {
   const [comparing, setComparing] = useState(false);
+  const [processingError, setProcessingError] = useState<string | null>(null);
+  
+  const handleProcessVideo = () => {
+    setProcessingError(null);
+    try {
+      onProcessVideo();
+    } catch (error) {
+      console.error('Error starting video processing:', error);
+      setProcessingError('Failed to start video processing');
+      toast.error('Could not start video processing. Please try again.');
+    }
+  };
   
   const handleDownload = () => {
     if (editedVideoUrl) {
-      const link = document.createElement('a');
-      link.href = editedVideoUrl;
-      link.download = 'edited-video.mp4'; // Changed from .webm to .mp4
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      toast.success('Download started');
+      try {
+        const link = document.createElement('a');
+        link.href = editedVideoUrl;
+        link.download = 'edited-video.mp4';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        toast.success('Download started');
+      } catch (error) {
+        console.error('Download error:', error);
+        toast.error('Failed to download video');
+      }
     }
   };
 
@@ -39,6 +56,13 @@ const VideoProcessor: React.FC<VideoProcessorProps> = ({
     <Card className="w-full">
       <CardContent className="p-6">
         <h2 className="text-xl font-semibold mb-4">Video Output</h2>
+        
+        {processingError && (
+          <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4 mb-4 flex items-center">
+            <AlertCircle className="text-red-500 h-5 w-5 mr-2 flex-shrink-0" />
+            <p className="text-sm text-red-700 dark:text-red-400">{processingError}</p>
+          </div>
+        )}
         
         {!editedVideoUrl && !isProcessing && (
           <div className="flex flex-col items-center justify-center h-64 border-2 border-dashed rounded-lg p-4">
@@ -48,7 +72,7 @@ const VideoProcessor: React.FC<VideoProcessorProps> = ({
               Create your edited video based on the transcription
             </p>
             <Button 
-              onClick={onProcessVideo} 
+              onClick={handleProcessVideo} 
               className="bg-editor-accent hover:bg-editor-accent/80"
               disabled={!originalVideoUrl}
             >
@@ -84,6 +108,7 @@ const VideoProcessor: React.FC<VideoProcessorProps> = ({
                         src={originalVideoUrl}
                         controls
                         className="w-full h-auto rounded-lg"
+                        onError={(e) => console.error('Original video error:', e)}
                       />
                     </div>
                   )}
@@ -93,6 +118,7 @@ const VideoProcessor: React.FC<VideoProcessorProps> = ({
                       src={editedVideoUrl}
                       controls
                       className="w-full h-auto rounded-lg"
+                      onError={(e) => console.error('Edited video error:', e)}
                     />
                   </div>
                 </div>
@@ -101,6 +127,7 @@ const VideoProcessor: React.FC<VideoProcessorProps> = ({
                   src={editedVideoUrl}
                   controls
                   className="w-full h-auto rounded-lg"
+                  onError={(e) => console.error('Video playback error:', e)}
                 />
               )}
             </div>

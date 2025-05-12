@@ -1,35 +1,37 @@
-
 import { toast } from 'sonner';
-import { fetchFile, toBlobURL } from '@ffmpeg/util';
+import { fetchFile } from '@ffmpeg/util';
 import { FFmpeg } from '@ffmpeg/ffmpeg';
 
 // Create an FFMPEG instance
 let ffmpeg: FFmpeg | null = null;
 
-// Initialize FFMPEG
+// Initialize FFMPEG with a more reliable approach
 const loadFFmpeg = async () => {
   if (ffmpeg) return ffmpeg;
   
   const instance = new FFmpeg();
   
   try {
-    // Use CDN URL that's known to work reliably
+    // Load ffmpeg directly from CDN without toBlobURL
+    // This should be more reliable in browser environments
     await instance.load({
-      coreURL: `https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.12.4/dist/ffmpeg-core.js`,
-      wasmURL: `https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.12.4/dist/ffmpeg-core.wasm`
+      coreURL: 'https://unpkg.com/@ffmpeg/core-st@0.11.1/dist/ffmpeg-core.js',
+      wasmURL: 'https://unpkg.com/@ffmpeg/core-st@0.11.1/dist/ffmpeg-core.wasm'
     });
     
+    console.log('FFmpeg loaded successfully');
     ffmpeg = instance;
     return instance;
   } catch (error) {
     console.error('Error loading FFmpeg:', error);
-    toast.error('Failed to load video processing library');
+    toast.error('Failed to load video processing library. Please try again.');
     throw error;
   }
 };
 
 export const extractAudioFromVideo = async (videoFile: File): Promise<Blob> => {
   try {
+    console.log('Extracting audio from video...');
     const ff = await loadFFmpeg();
     
     // Write the input video file to FFmpeg's virtual file system
@@ -47,6 +49,7 @@ export const extractAudioFromVideo = async (videoFile: File): Promise<Blob> => {
     
     // Read the output audio file
     const data = await ff.readFile('output.mp3');
+    console.log('Audio extraction successful');
     return new Blob([data], { type: 'audio/mp3' });
   } catch (error) {
     console.error('Error extracting audio:', error);
@@ -64,33 +67,40 @@ export const processVideoWithTranscript = async (
 ): Promise<string> => {
   return new Promise(async (resolve, reject) => {
     try {
+      console.log('Starting video processing...');
       onProgressUpdate(10);
       
       // Load FFmpeg
       const ff = await loadFFmpeg();
+      console.log('FFmpeg loaded for video processing');
       
       // Set up progress callback
       ff.on('progress', (progress) => {
         const percent = Math.round(progress.progress * 100);
+        console.log(`Processing progress: ${percent}%`);
         onProgressUpdate(percent);
       });
       
       // Fetch the video file
       const response = await fetch(videoUrl);
       const videoBlob = await response.blob();
+      console.log('Video blob fetched:', videoBlob.type, videoBlob.size);
       
       // Write the input file to FFmpeg's virtual filesystem
-      const inputFileName = 'input.webm';
+      const inputFileName = 'input.mp4';
       await ff.writeFile(inputFileName, await fetchFile(videoBlob));
+      console.log('Video file written to FFmpeg filesystem');
       
       // Analyze transcripts to determine edit points
       const editPoints = analyzeTranscripts(originalTranscript, editedTranscript);
+      console.log('Edit points determined:', editPoints);
       onProgressUpdate(20);
       
       const outputFileName = 'output.mp4';
       
       if (editPoints.length === 0) {
         // No edits needed, just convert to MP4
+        console.log('No edit points detected, converting video format only');
         await ff.exec([
           '-i', inputFileName,
           '-c:v', 'libx264',
@@ -103,6 +113,7 @@ export const processVideoWithTranscript = async (
       } else {
         // Process video with edit points
         const filterComplex = buildFilterComplex(editPoints);
+        console.log('Using filter complex:', filterComplex);
         
         // Build FFmpeg command for editing
         const ffmpegArgs = [
@@ -118,16 +129,20 @@ export const processVideoWithTranscript = async (
           outputFileName
         ];
         
+        console.log('Executing FFmpeg command with args:', ffmpegArgs);
         // Execute FFmpeg command
         await ff.exec(ffmpegArgs);
       }
       
+      console.log('FFmpeg processing completed, reading output file');
       // Read the output file
       const data = await ff.readFile(outputFileName);
+      console.log('Output file read, size:', data.byteLength);
       
       // Create a URL for the output video
       const outputBlob = new Blob([data], { type: 'video/mp4' });
       const url = URL.createObjectURL(outputBlob);
+      console.log('Output URL created');
       
       // Add visual overlay to show this is an edited version
       onProgressUpdate(100);
