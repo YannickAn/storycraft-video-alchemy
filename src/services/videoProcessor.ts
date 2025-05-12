@@ -1,3 +1,4 @@
+
 import { toast } from 'sonner';
 import { fetchFile, toBlobURL } from '@ffmpeg/util';
 import { FFmpeg } from '@ffmpeg/ffmpeg';
@@ -10,13 +11,14 @@ const loadFFmpeg = async () => {
   if (ffmpeg) return ffmpeg;
   
   const instance = new FFmpeg();
-  const baseURL = 'https://unpkg.com/@ffmpeg/core@0.12.4/dist/umd';
   
   try {
+    // Use CDN URL that's known to work reliably
     await instance.load({
-      coreURL: await toBlobURL(`${baseURL}/ffmpeg-core.js`, 'text/javascript'),
-      wasmURL: await toBlobURL(`${baseURL}/ffmpeg-core.wasm`, 'application/wasm')
+      coreURL: `https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.12.4/dist/ffmpeg-core.js`,
+      wasmURL: `https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.12.4/dist/ffmpeg-core.wasm`
     });
+    
     ffmpeg = instance;
     return instance;
   } catch (error) {

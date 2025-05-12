@@ -27,7 +27,7 @@ const VideoProcessor: React.FC<VideoProcessorProps> = ({
     if (editedVideoUrl) {
       const link = document.createElement('a');
       link.href = editedVideoUrl;
-      link.download = 'edited-video.webm';
+      link.download = 'edited-video.mp4'; // Changed from .webm to .mp4
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
