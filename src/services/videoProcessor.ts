@@ -53,33 +53,141 @@ export const extractAudioFromVideo = async (videoFile: File): Promise<Blob> => {
   }
 };
 
-// This is a simulated function since real-time video editing based on transcript
-// would require more complex processing that's not feasible in a browser environment
+// This function processes a video based on transcript editing
+// Since we can't actually edit videos in the browser, we simulate the effect
+// by creating a new video with visual cues indicating the edited portions
 export const processVideoWithTranscript = async (
   videoUrl: string, 
   originalTranscript: string, 
   editedTranscript: string,
   onProgressUpdate: (progress: number) => void
 ): Promise<string> => {
-  // In a real implementation, this would send the video and transcripts to a backend service
-  // that would process the video and return the edited version
-  
-  // For now, we'll simulate the processing with a timer
-  return new Promise((resolve) => {
-    let progress = 0;
-    const interval = setInterval(() => {
-      progress += Math.random() * 5;
-      if (progress > 100) progress = 100;
-      onProgressUpdate(Math.floor(progress));
+  return new Promise(async (resolve, reject) => {
+    try {
+      // Create video element to load the original video
+      const video = document.createElement('video');
+      video.src = videoUrl;
+      video.muted = true;
+
+      await new Promise<void>((resolveLoad) => {
+        video.onloadeddata = () => resolveLoad();
+        video.onerror = () => reject(new Error('Failed to load video'));
+      });
+
+      const canvas = document.createElement('canvas');
+      const width = video.videoWidth;
+      const height = video.videoHeight;
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext('2d');
       
-      if (progress >= 100) {
-        clearInterval(interval);
-        // In a real implementation, this would be the URL to the processed video
-        // For now, we'll just return the original video URL
-        setTimeout(() => {
-          resolve(videoUrl);
-        }, 1000);
+      if (!ctx) {
+        throw new Error('Failed to create canvas context');
       }
-    }, 800);
+
+      // Get differences between transcripts to simulate where edits happened
+      const originalWords = originalTranscript.split(/\s+/);
+      const editedWords = editedTranscript.split(/\s+/);
+      
+      // Simple diff - words only in edited transcript are "new"
+      const addedWords = editedWords.filter(word => !originalWords.includes(word));
+      const removedWords = originalWords.filter(word => !editedWords.includes(word));
+      
+      // Progress tracking
+      const duration = video.duration;
+      const totalFrames = Math.floor(duration * 15); // 15 FPS for preview
+      let frameCount = 0;
+      
+      // Prepare for recording
+      const stream = canvas.captureStream(15);
+      const mediaRecorder = new MediaRecorder(stream, { mimeType: 'video/webm' });
+      const chunks: BlobPart[] = [];
+      
+      mediaRecorder.ondataavailable = (e) => {
+        if (e.data.size > 0) {
+          chunks.push(e.data);
+        }
+      };
+      
+      mediaRecorder.onstop = () => {
+        const blob = new Blob(chunks, { type: 'video/webm' });
+        const url = URL.createObjectURL(blob);
+        resolve(url);
+      };
+      
+      // Add visual effects to indicate edited parts
+      const drawFrame = () => {
+        if (!ctx) return;
+        
+        ctx.drawImage(video, 0, 0, width, height);
+        
+        // Add overlay information to show this is an edited version
+        const progress = video.currentTime / duration;
+        
+        // Visual indicator that this is an edited video
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
+        ctx.fillRect(10, 10, width - 20, 30);
+        
+        ctx.fillStyle = 'white';
+        ctx.font = '14px Arial';
+        ctx.fillText(`Edited Video - ${Math.round(progress * 100)}% - ${removedWords.length} words removed`, 20, 30);
+        
+        // Visual effect for sections with edits (simulate highlighting)
+        if (Math.random() < 0.3 && removedWords.length > 0) {
+          const randomWord = removedWords[Math.floor(Math.random() * removedWords.length)];
+          ctx.fillStyle = 'rgba(255, 0, 0, 0.2)';
+          ctx.fillRect(
+            Math.random() * (width - 100), 
+            height - 60 - Math.random() * 40,
+            100, 
+            20
+          );
+          ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
+          ctx.fillText(`Removed: "${randomWord}"`, width / 2 - 50, height - 20);
+        }
+        
+        if (Math.random() < 0.3 && addedWords.length > 0) {
+          const randomWord = addedWords[Math.floor(Math.random() * addedWords.length)];
+          ctx.fillStyle = 'rgba(0, 255, 0, 0.2)';
+          ctx.fillRect(
+            Math.random() * (width - 100), 
+            60 + Math.random() * 40,
+            100, 
+            20
+          );
+          ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
+          ctx.fillText(`Added: "${randomWord}"`, width / 2 - 50, 60);
+        }
+        
+        // Update progress
+        frameCount++;
+        onProgressUpdate(Math.floor((frameCount / totalFrames) * 100));
+        
+        if (video.currentTime < duration) {
+          requestAnimationFrame(drawFrame);
+        } else {
+          mediaRecorder.stop();
+          video.pause();
+        }
+      };
+      
+      video.onplay = () => {
+        drawFrame();
+      };
+      
+      // Start recording and playing
+      mediaRecorder.start();
+      video.play();
+      
+      // Handle errors
+      video.onerror = () => {
+        mediaRecorder.stop();
+        reject(new Error('Error during video processing'));
+      };
+      
+    } catch (error) {
+      console.error('Error processing video:', error);
+      reject(error);
+    }
   });
 };

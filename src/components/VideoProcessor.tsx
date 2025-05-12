@@ -21,14 +21,17 @@ const VideoProcessor: React.FC<VideoProcessorProps> = ({
   originalVideoUrl,
   onProcessVideo
 }) => {
+  const [comparing, setComparing] = useState(false);
+  
   const handleDownload = () => {
     if (editedVideoUrl) {
       const link = document.createElement('a');
       link.href = editedVideoUrl;
-      link.download = 'edited-video.mp4';
+      link.download = 'edited-video.webm';
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
+      toast.success('Download started');
     }
   };
 
@@ -72,19 +75,56 @@ const VideoProcessor: React.FC<VideoProcessorProps> = ({
         {editedVideoUrl && !isProcessing && (
           <div className="flex flex-col gap-4">
             <div className="relative rounded-lg overflow-hidden">
-              <video
-                src={editedVideoUrl}
-                controls
-                className="w-full h-auto rounded-lg"
-              />
+              {comparing ? (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                  {originalVideoUrl && (
+                    <div>
+                      <p className="text-sm font-medium mb-1 text-gray-400">Original Video</p>
+                      <video
+                        src={originalVideoUrl}
+                        controls
+                        className="w-full h-auto rounded-lg"
+                      />
+                    </div>
+                  )}
+                  <div>
+                    <p className="text-sm font-medium mb-1 text-gray-400">Edited Video</p>
+                    <video
+                      src={editedVideoUrl}
+                      controls
+                      className="w-full h-auto rounded-lg"
+                    />
+                  </div>
+                </div>
+              ) : (
+                <video
+                  src={editedVideoUrl}
+                  controls
+                  className="w-full h-auto rounded-lg"
+                />
+              )}
             </div>
-            <div className="flex justify-between">
-              <Button variant="outline" onClick={() => toast.info("Starting new edit")}>
-                New Edit
+            <div className="flex flex-wrap justify-between gap-2">
+              <Button 
+                variant="outline" 
+                onClick={() => {
+                  setComparing(!comparing);
+                  toast.info(comparing ? "Showing edited video only" : "Comparing original and edited videos");
+                }}
+              >
+                {comparing ? "Show Edited Only" : "Compare Videos"}
               </Button>
-              <Button onClick={handleDownload} className="bg-editor-accent hover:bg-editor-accent/80">
-                <Download className="mr-2 h-4 w-4" /> Download Video
-              </Button>
+              <div className="flex gap-2">
+                <Button variant="outline" onClick={() => {
+                  toast.info("Starting new edit");
+                  window.location.reload();
+                }}>
+                  New Edit
+                </Button>
+                <Button onClick={handleDownload} className="bg-editor-accent hover:bg-editor-accent/80">
+                  <Download className="mr-2 h-4 w-4" /> Download Video
+                </Button>
+              </div>
             </div>
           </div>
         )}
