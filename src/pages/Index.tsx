@@ -32,35 +32,38 @@ const Index = () => {
     setApiKey(key);
   };
 
-  const handleVideoSelect = async (file: File, url: string) => {
+  const handleVideoSelect = (file: File, url: string) => {
     setSelectedVideo({ file, url });
     setTranscription('');
     setEditedTranscription('');
     setOriginalTranscription('');
     setEditedVideoUrl(null);
+  };
+
+  const handleTranscribeVideo = async () => {
+    if (!selectedVideo || !apiKey) {
+      toast.error('Please select a video and provide an API key first');
+      return;
+    }
     
-    if (apiKey) {
-      try {
-        setIsTranscribing(true);
-        toast.info('Extracting audio from video...');
-        
-        const audioBlob = await extractAudioFromVideo(file);
-        toast.info('Transcribing audio...');
-        
-        const text = await transcribeAudio(audioBlob, apiKey);
-        setTranscription(text);
-        setEditedTranscription(text);
-        setOriginalTranscription(text);
-        
-        toast.success('Video transcribed successfully!');
-      } catch (error) {
-        console.error('Error processing video:', error);
-        toast.error('Failed to process video');
-      } finally {
-        setIsTranscribing(false);
-      }
-    } else {
-      toast.error('Please enter your OpenAI API key first');
+    try {
+      setIsTranscribing(true);
+      toast.info('Extracting audio from video...');
+      
+      const audioBlob = await extractAudioFromVideo(selectedVideo.file);
+      toast.info('Transcribing audio...');
+      
+      const text = await transcribeAudio(audioBlob, apiKey);
+      setTranscription(text);
+      setEditedTranscription(text);
+      setOriginalTranscription(text);
+      
+      toast.success('Video transcribed successfully!');
+    } catch (error) {
+      console.error('Error processing video:', error);
+      toast.error('Failed to process video. Please try again.');
+    } finally {
+      setIsTranscribing(false);
     }
   };
 
@@ -81,6 +84,7 @@ const Index = () => {
       toast.success('Transcription enhanced!');
     } catch (error) {
       console.error('Error enhancing transcription:', error);
+      toast.error('Failed to enhance transcription. Please try again.');
     } finally {
       setIsEnhancing(false);
     }
@@ -107,7 +111,7 @@ const Index = () => {
       toast.success('Video processed successfully!');
     } catch (error) {
       console.error('Error processing video:', error);
-      toast.error('Failed to process video');
+      toast.error('Failed to process video. Please try again.');
     } finally {
       setIsProcessing(false);
     }
@@ -142,7 +146,10 @@ const Index = () => {
 
           <div className="grid lg:grid-cols-2 gap-6">
             <div className="space-y-6">
-              <VideoUploader onVideoSelected={handleVideoSelect} />
+              <VideoUploader 
+                onVideoSelected={handleVideoSelect}
+                onRequestTranscription={handleTranscribeVideo}
+              />
               <TranscriptionEditor 
                 transcription={editedTranscription}
                 isLoading={isTranscribing}

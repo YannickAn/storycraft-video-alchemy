@@ -1,5 +1,6 @@
 
 import { FFmpeg } from '@ffmpeg/ffmpeg';
+import { toBlobURL } from '@ffmpeg/util';
 import { toast } from 'sonner';
 
 // Create a singleton FFMPEG instance
@@ -14,11 +15,14 @@ export const loadFFmpeg = async (): Promise<FFmpeg> => {
   const instance = new FFmpeg();
   
   try {
-    // Load ffmpeg directly from CDN without toBlobURL
-    // This should be more reliable in browser environments
+    // Use toBlobURL which is more reliable for browser environments
+    const baseURL = 'https://unpkg.com/@ffmpeg/core-st@0.11.1/dist/';
+    const coreURL = await toBlobURL(`${baseURL}ffmpeg-core.js`, 'text/javascript');
+    const wasmURL = await toBlobURL(`${baseURL}ffmpeg-core.wasm`, 'application/wasm');
+    
     await instance.load({
-      coreURL: 'https://unpkg.com/@ffmpeg/core-st@0.11.1/dist/ffmpeg-core.js',
-      wasmURL: 'https://unpkg.com/@ffmpeg/core-st@0.11.1/dist/ffmpeg-core.wasm'
+      coreURL,
+      wasmURL
     });
     
     console.log('FFmpeg loaded successfully');
@@ -30,3 +34,17 @@ export const loadFFmpeg = async (): Promise<FFmpeg> => {
     throw error;
   }
 };
+
+/**
+ * Check if FFmpeg is loaded
+ */
+export const isFFmpegLoaded = (): boolean => {
+  return ffmpeg !== null;
+}
+
+/**
+ * Reset FFmpeg instance (useful for testing and recovery from errors)
+ */
+export const resetFFmpeg = (): void => {
+  ffmpeg = null;
+}

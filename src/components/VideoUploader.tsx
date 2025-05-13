@@ -7,9 +7,10 @@ import { toast } from 'sonner';
 
 interface VideoUploaderProps {
   onVideoSelected: (file: File, url: string) => void;
+  onRequestTranscription: () => void;
 }
 
-const VideoUploader: React.FC<VideoUploaderProps> = ({ onVideoSelected }) => {
+const VideoUploader: React.FC<VideoUploaderProps> = ({ onVideoSelected, onRequestTranscription }) => {
   const [dragActive, setDragActive] = useState(false);
   const [selectedVideo, setSelectedVideo] = useState<{ file: File; url: string } | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -114,11 +115,19 @@ const VideoUploader: React.FC<VideoUploaderProps> = ({ onVideoSelected }) => {
             >
               <X className="h-4 w-4" />
             </Button>
-            <div className="mt-2 text-sm flex justify-between items-center">
-              <span className="font-medium truncate">{selectedVideo.file.name}</span>
-              <span className="text-gray-500">
-                {(selectedVideo.file.size / (1024 * 1024)).toFixed(2)} MB
-              </span>
+            <div className="mt-4 flex flex-col gap-3">
+              <div className="text-sm flex justify-between items-center">
+                <span className="font-medium truncate">{selectedVideo.file.name}</span>
+                <span className="text-gray-500">
+                  {(selectedVideo.file.size / (1024 * 1024)).toFixed(2)} MB
+                </span>
+              </div>
+              <Button 
+                onClick={onRequestTranscription} 
+                className="bg-editor-accent hover:bg-editor-accent/80 w-full"
+              >
+                Transcribe Video
+              </Button>
             </div>
           </div>
         )}
