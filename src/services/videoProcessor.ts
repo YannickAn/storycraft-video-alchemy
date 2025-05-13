@@ -1,3 +1,4 @@
+
 import { toast } from 'sonner';
 import { fetchFile } from '@ffmpeg/util';
 import { FFmpeg } from '@ffmpeg/ffmpeg';
@@ -137,7 +138,7 @@ export const processVideoWithTranscript = async (
       console.log('FFmpeg processing completed, reading output file');
       // Read the output file
       const data = await ff.readFile(outputFileName);
-      console.log('Output file read, size:', data.byteLength);
+      console.log('Output file read, size:', data instanceof Uint8Array ? data.length : 'unknown');
       
       // Create a URL for the output video
       const outputBlob = new Blob([data], { type: 'video/mp4' });
@@ -203,3 +204,4 @@ const buildFilterComplex = (editPoints: Array<{ keep: boolean, startTime: number
   // This is just a placeholder that shows a filtered version
   return "[0:v]drawtext=text='Edited Video':fontcolor=white:fontsize=24:box=1:boxcolor=black@0.5:boxborderw=5:x=(w-text_w)/2:y=10[v];[0:a]volume=1[a]";
 };
+
